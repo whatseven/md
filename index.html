@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>名单对比工具</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #ffe6f2; /* 粉色背景 */
+            color: #333;
+            text-align: center;
+        }
+        .container {
+            display: flex; /* 使用flex布局 */
+            justify-content: center; /* 居中对齐 */
+            margin: 20px;
+        }
+        textarea {
+            margin: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ff66b2; /* 粉色边框 */
+            width: 300px; /* 设置宽度 */
+            height: 200px; /* 设置高度 */
+        }
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            border-radius: 5px;
+            border: 1px solid #ff66b2; /* 粉色边框 */
+            background-color: #ff66b2; /* 粉色背景 */
+            color: white; /* 白色文字 */
+            cursor: pointer; /* 鼠标指针 */
+        }
+        button:hover {
+            background-color: #ff3385; /* 悬停时的颜色 */
+        }
+        .result {
+            display: flex; /* 使用flex布局 */
+            justify-content: space-around; /* 均匀分布 */
+            margin-top: 20px;
+        }
+        .result-column {
+            width: 30%; /* 每列宽度 */
+            text-align: left; /* 左对齐 */
+        }
+        .count {
+            margin-top: 5px; /* 输入框人数的间距 */
+            font-weight: bold; /* 加粗 */
+        }
+    </style>
+</head>
+<body>
+    <h1>名单对比工具</h1>
+    <div class="container">
+        <div>
+            <textarea id="list1" placeholder="输入第一个名单"></textarea>
+            <div class="count" id="count1">第一个名单人数: 0人</div>
+        </div>
+        <div>
+            <textarea id="list2" placeholder="输入第二个名单"></textarea>
+            <div class="count" id="count2">第二个名单人数: 0人</div>
+        </div>
+    </div>
+    <button onclick="compareLists()">对比名单</button>
+    <button onclick="exportToExcel()">导出为Excel</button>
+    <div class="result" id="result"></div>
+
+    <script>
+        // 处理名字列表的函数
+        function processNames(inputText) {
+            // 先按换行或逗号分割
+            let names = inputText.split(/[\n,]+/).map(name => name.trim()).filter(name => name);
+            
+            // 处理包含多个空格的情况
+            names = names.map(name => {
+                // 将多个空格替换为单个空格
+                name = name.replace(/\s+/g, ' ').trim();
+                
+                // 如果空格分隔的部分中有单字，需要与前面的字合并
+                let parts = name.split(' ');
+                let result = [];
+                
+                for (let i = 0; i < parts.length; i++) {
+                    if (parts[i].length === 1 && i + 1 < parts.length && parts[i + 1].length === 1) {
+                        // 如果当前部分和下一部分都是单字，合并它们
+                        result.push(parts[i] + parts[i + 1]);
+                        i++; // 跳过下一个部分
+                    } else if (parts[i].length === 1 && i > 0 && result.length > 0) {
+                        // 如果是单字且前面有内容，将其与前一个名字合并
+                        result[result.length - 1] += parts[i];
+                    } else {
+                        result.push(parts[i]);
+                    }
+                }
+                
+                return result;
+            }).flat();
+            
+            // 过滤掉长度为1的名字（假设没有单字名）
+            return names.filter(name => name.length > 1);
+        }
+
+        function updateCounts() {
+            const list1 = processNames(document.getElementById('list1').value);
+            const list2 = processNames(document.getElementById('list2').value);
+            document.getElementById('count1').innerText = `第一个名单人数: ${list1.length}人`;
+            document.getElementById('count2').innerText = `第二个名单人数: ${list2.length}人`;
+        }
+
+        function compareLists() {
+            updateCounts();
+
+            const list1 = processNames(document.getElementById('list1').value);
+            const list2 = processNames(document.getElementById('list2').value);
+
+            // 计算每个名单中名字的出现次数
+            function getNameCounts(list) {
+                const counts = {};
+                list.forEach(name => {
+                    counts[name] = (counts[name] || 0) + 1;
+                });
+                return counts;
+            }
+
+            const list1Counts = getNameCounts(list1);
+            const list2Counts = getNameCounts(list2);
+
+            // 获取唯一名字列表
+            const uniqueNames1 = [...new Set(list1)];
+            const uniqueNames2 = [...new Set(list2)];
+
+            // 计算只在list1中的名字
+            const onlyInList1 = uniqueNames1
+                .filter(name => !uniqueNames2.includes(name))
+                .map(name => list1Counts[name] > 1 ? `${name}（重复${list1Counts[name]}次）` : name);
+
+            // 计算只在list2中的名字
+            const onlyInList2 = uniqueNames2
+                .filter(name => !uniqueNames1.includes(name))
+                .map(name => list2Counts[name] > 1 ? `${name}（重复${list2Counts[name]}次）` : name);
+
+            // 计算重复的名字
+            const inBoth = uniqueNames1
+                .filter(name => uniqueNames2.includes(name))
+                .map(name => {
+                    const count1 = list1Counts[name];
+                    const count2 = list2Counts[name];
+                    if (count1 === 1 && count2 === 1) return name;
+                    return `${name}（第一名单重复${count1}次，第二名单重复${count2}次）`;
+                });
+
+            let resultHtml = `<div class="result-column">`;
+            resultHtml += `<h2>第一个名单有但第二个名单没有</h2>`;
+            resultHtml += `<div>${onlyInList1.length}人</div>`;
+            resultHtml += `<div>${onlyInList1.join('<br>')}</div>`;
+            resultHtml += `</div>`;
+
+            resultHtml += `<div class="result-column">`;
+            resultHtml += `<h2>第二个名单有但第一个名单没有</h2>`;
+            resultHtml += `<div>${onlyInList2.length}人</div>`;
+            resultHtml += `<div>${onlyInList2.join('<br>')}</div>`;
+            resultHtml += `</div>`;
+
+            resultHtml += `<div class="result-column">`;
+            resultHtml += `<h2>两个名单重复的名字</h2>`;
+            resultHtml += `<div>${inBoth.length}人</div>`;
+            resultHtml += `<div>${inBoth.join('<br>')}</div>`;
+            resultHtml += `</div>`;
+
+            document.getElementById('result').innerHTML = resultHtml;
+        }
+
+        function exportToExcel() {
+            const list1 = processNames(document.getElementById('list1').value);
+            const list2 = processNames(document.getElementById('list2').value);
+
+            function getNameCounts(list) {
+                const counts = {};
+                list.forEach(name => {
+                    counts[name] = (counts[name] || 0) + 1;
+                });
+                return counts;
+            }
+
+            const list1Counts = getNameCounts(list1);
+            const list2Counts = getNameCounts(list2);
+
+            const uniqueNames1 = [...new Set(list1)];
+            const uniqueNames2 = [...new Set(list2)];
+
+            const onlyInList1 = uniqueNames1
+                .filter(name => !uniqueNames2.includes(name))
+                .map(name => list1Counts[name] > 1 ? `${name}（重复${list1Counts[name]}次）` : name);
+
+            const onlyInList2 = uniqueNames2
+                .filter(name => !uniqueNames1.includes(name))
+                .map(name => list2Counts[name] > 1 ? `${name}（重复${list2Counts[name]}次）` : name);
+
+            const inBoth = uniqueNames1
+                .filter(name => uniqueNames2.includes(name))
+                .map(name => {
+                    const count1 = list1Counts[name];
+                    const count2 = list2Counts[name];
+                    if (count1 === 1 && count2 === 1) return name;
+                    return `${name}（第一名单重复${count1}次，第二名单重复${count2}次）`;
+                });
+
+            const maxLength = Math.max(onlyInList1.length, onlyInList2.length, inBoth.length);
+
+            const wsData = [
+                ["第一个名单独有", "第二个名单独有", "两个名单都有"],
+                [`${onlyInList1.length}人`, `${onlyInList2.length}人`, `${inBoth.length}人`]
+            ];
+
+            for (let i = 0; i < maxLength; i++) {
+                wsData.push([
+                    onlyInList1[i] || "",
+                    onlyInList2[i] || "",
+                    inBoth[i] || ""
+                ]);
+            }
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+            const wscols = [
+                {wch: 30},
+                {wch: 30},
+                {wch: 40}
+            ];
+            ws['!cols'] = wscols;
+
+            XLSX.utils.book_append_sheet(wb, ws, "名单对比结果");
+            XLSX.writeFile(wb, "名单对比结果.xlsx");
+        }
+
+        document.getElementById('list1').addEventListener('input', updateCounts);
+        document.getElementById('list2').addEventListener('input', updateCounts);
+    </script>
+</body>
+</html> 
