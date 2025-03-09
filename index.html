@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>名单对比工具</title>
+    <title>名单对比和Excel处理工具</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
     <style>
         body {
@@ -50,23 +50,131 @@
             margin-top: 5px; /* 输入框人数的间距 */
             font-weight: bold; /* 加粗 */
         }
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ff66b2;
+            background-color: #ff99cc;
+            border-radius: 5px 5px 0 0;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+            color: white;
+            margin: 0;
+        }
+        .tab button:hover {
+            background-color: #ff3385;
+        }
+        .tab button.active {
+            background-color: #ff3385;
+        }
+        .tabcontent {
+            display: none;
+            padding: 15px;
+            border: 1px solid #ff66b2;
+            border-top: none;
+            border-radius: 0 0 5px 5px;
+            background-color: white;
+        }
+        .file-input-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+        .upload-area {
+            padding: 20px;
+            border: 2px dashed #ff66b2;
+            border-radius: 5px;
+            margin: 20px auto;
+            width: 80%;
+            background-color: #fff0f5;
+        }
+        .preview-table {
+            margin: 20px auto;
+            border-collapse: collapse;
+            width: 80%;
+        }
+        .preview-table th, .preview-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .preview-table th {
+            background-color: #ff99cc;
+            color: white;
+        }
+        .process-result {
+            margin: 20px;
+            text-align: left;
+            padding: 10px;
+            background-color: #fff0f5;
+            border-radius: 5px;
+            border: 1px solid #ff66b2;
+        }
     </style>
 </head>
 <body>
-    <h1>名单对比工具</h1>
-    <div class="container">
-        <div>
-            <textarea id="list1" placeholder="输入第一个名单"></textarea>
-            <div class="count" id="count1">第一个名单人数: 0人</div>
+    <h1>名单对比和Excel处理工具</h1>
+    
+    <div class="tab">
+        <button class="tablinks active" onclick="openTab(event, 'NameCompare')">名单对比</button>
+        <button class="tablinks" onclick="openTab(event, 'ExcelProcess')">Excel处理</button>
+    </div>
+
+    <div id="NameCompare" class="tabcontent" style="display: block;">
+        <h2>名单对比功能</h2>
+        <div class="container">
+            <div>
+                <textarea id="list1" placeholder="输入第一个名单"></textarea>
+                <div class="count" id="count1">第一个名单人数: 0人</div>
+            </div>
+            <div>
+                <textarea id="list2" placeholder="输入第二个名单"></textarea>
+                <div class="count" id="count2">第二个名单人数: 0人</div>
+            </div>
         </div>
-        <div>
-            <textarea id="list2" placeholder="输入第二个名单"></textarea>
-            <div class="count" id="count2">第二个名单人数: 0人</div>
+        <button onclick="compareLists()">对比名单</button>
+        <button onclick="exportToExcel()">导出为Excel</button>
+        <div class="result" id="result"></div>
+    </div>
+
+    <div id="ExcelProcess" class="tabcontent">
+        <h2>Excel文件处理功能</h2>
+        <div class="upload-area">
+            <p>上传一个包含两列数据的Excel文件：</p>
+            <p>第一列应是文件名，第二列应是带序号的名字（格式如：1.名字）</p>
+            <input type="file" id="excelFile" accept=".xlsx, .xls" onChange="handleExcelUpload(event)" />
+        </div>
+        
+        <div id="excelPreview" style="display:none;">
+            <h3>Excel预览</h3>
+            <div id="tablePreview"></div>
+            
+            <div class="container">
+                <div>
+                    <p>请选择文件名列（从0开始）:</p>
+                    <input type="number" id="fileNameCol" value="0" min="0" />
+                </div>
+                <div>
+                    <p>请选择带序号名字列（从0开始）:</p>
+                    <input type="number" id="numberedNameCol" value="1" min="0" />
+                </div>
+            </div>
+            
+            <button onclick="processExcel()">处理Excel</button>
+        </div>
+        
+        <div id="processResult" class="process-result" style="display:none;">
+            <h3>处理结果</h3>
+            <div id="resultSummary"></div>
+            <div id="resultTablePreview"></div>
+            <button onclick="downloadProcessedExcel()">下载处理后的Excel</button>
         </div>
     </div>
-    <button onclick="compareLists()">对比名单</button>
-    <button onclick="exportToExcel()">导出为Excel</button>
-    <div class="result" id="result"></div>
 
     <script>
         // 处理名字列表的函数
@@ -239,6 +347,238 @@
 
         document.getElementById('list1').addEventListener('input', updateCounts);
         document.getElementById('list2').addEventListener('input', updateCounts);
+
+        // Excel处理功能的变量
+        let excelData = null;
+        let processedData = null;
+
+        // 打开标签页
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+
+        // 处理Excel文件上传
+        function handleExcelUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                
+                // 假设第一个工作表是我们需要的
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                
+                // 转换为JSON
+                excelData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                
+                // 显示预览
+                showExcelPreview(excelData);
+                
+                // 显示Excel预览区域
+                document.getElementById('excelPreview').style.display = 'block';
+                
+                // 隐藏处理结果区域
+                document.getElementById('processResult').style.display = 'none';
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // 显示Excel预览
+        function showExcelPreview(data) {
+            if (!data || data.length === 0) return;
+            
+            let html = '<table class="preview-table">';
+            
+            // 表头（列索引）
+            html += '<tr>';
+            for (let j = 0; j < data[0].length; j++) {
+                html += `<th>列${j}</th>`;
+            }
+            html += '</tr>';
+            
+            // 数据行（最多显示5行）
+            const rowsToShow = Math.min(data.length, 6);
+            for (let i = 0; i < rowsToShow; i++) {
+                html += '<tr>';
+                for (let j = 0; j < data[i].length; j++) {
+                    html += `<td>${data[i][j] || ''}</td>`;
+                }
+                html += '</tr>';
+            }
+            
+            html += '</table>';
+            
+            document.getElementById('tablePreview').innerHTML = html;
+        }
+
+        // 处理Excel
+        function processExcel() {
+            if (!excelData || excelData.length <= 1) {
+                alert('请上传有效的Excel文件');
+                return;
+            }
+            
+            // 获取用户选择的列索引
+            const fileNameCol = parseInt(document.getElementById('fileNameCol').value);
+            const numberedNameCol = parseInt(document.getElementById('numberedNameCol').value);
+            
+            if (isNaN(fileNameCol) || isNaN(numberedNameCol)) {
+                alert('请输入有效的列索引');
+                return;
+            }
+            
+            // 复制数据并添加新列
+            processedData = excelData.map(row => {
+                // 创建一个新行对象，包含所有原始数据
+                const newRow = [...row];
+                // 添加新列，初始值为文件名
+                newRow.push(row[fileNameCol] || '');
+                return newRow;
+            });
+            
+            // 添加表头（如果没有）
+            if (processedData.length > 0) {
+                if (!processedData[0][processedData[0].length - 1]) {
+                    processedData[0][processedData[0].length - 1] = '新文件名';
+                }
+            }
+            
+            let matchCount = 0;
+            
+            // 处理数据（从第二行开始，跳过表头）
+            for (let i = 1; i < processedData.length; i++) {
+                const row = processedData[i];
+                const leftName = row[fileNameCol];
+                
+                if (!leftName) continue; // 跳过空值
+                
+                const leftNameStr = String(leftName).trim();
+                let matched = false;
+                
+                // 遍历所有带序号的名字
+                for (let j = 1; j < processedData.length; j++) {
+                    const rightItem = processedData[j][numberedNameCol];
+                    
+                    if (!rightItem) continue; // 跳过空值
+                    
+                    const rightItemStr = String(rightItem).trim();
+                    
+                    // 尝试提取右侧项目的序号和名字部分
+                    const match = rightItemStr.match(/^(\d+)\.(.*)$/);
+                    
+                    if (match) {
+                        const number = match[1]; // 序号部分
+                        const name = match[2].trim(); // 名字部分
+                        
+                        // 检查右侧的名字部分是否在左侧文件名中
+                        if (leftNameStr.includes(name)) {
+                            // 匹配成功，添加序号到左侧文件名
+                            processedData[i][processedData[i].length - 1] = `${number}.${leftNameStr}`;
+                            matched = true;
+                            matchCount++;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // 按序号排序
+            processedData.sort((a, b) => {
+                if (a.length === 0 || b.length === 0) return 0;
+                
+                // 跳过表头
+                if (a === processedData[0]) return -1;
+                if (b === processedData[0]) return 1;
+                
+                const aFilename = a[a.length - 1] || '';
+                const bFilename = b[b.length - 1] || '';
+                
+                // 提取序号
+                const aMatch = String(aFilename).match(/^(\d+)\./);
+                const bMatch = String(bFilename).match(/^(\d+)\./);
+                
+                const aNumber = aMatch ? parseInt(aMatch[1]) : Infinity;
+                const bNumber = bMatch ? parseInt(bMatch[1]) : Infinity;
+                
+                return aNumber - bNumber;
+            });
+            
+            // 显示处理结果
+            showProcessResult(matchCount);
+        }
+
+        // 显示处理结果
+        function showProcessResult(matchCount) {
+            if (!processedData) return;
+            
+            // 创建结果摘要
+            const resultSummary = `
+                <p>总项目数: ${processedData.length - 1}</p>
+                <p>成功匹配数: ${matchCount}</p>
+            `;
+            
+            document.getElementById('resultSummary').innerHTML = resultSummary;
+            
+            // 创建结果表格预览
+            let html = '<table class="preview-table">';
+            
+            // 表头
+            html += '<tr>';
+            for (let j = 0; j < processedData[0].length; j++) {
+                html += `<th>${processedData[0][j] || `列${j}`}</th>`;
+            }
+            html += '</tr>';
+            
+            // 数据行（最多显示10行）
+            const rowsToShow = Math.min(processedData.length, 11);
+            for (let i = 1; i < rowsToShow; i++) {
+                html += '<tr>';
+                for (let j = 0; j < processedData[i].length; j++) {
+                    html += `<td>${processedData[i][j] || ''}</td>`;
+                }
+                html += '</tr>';
+            }
+            
+            html += '</table>';
+            
+            document.getElementById('resultTablePreview').innerHTML = html;
+            
+            // 显示处理结果区域
+            document.getElementById('processResult').style.display = 'block';
+        }
+
+        // 下载处理后的Excel
+        function downloadProcessedExcel() {
+            if (!processedData || processedData.length === 0) {
+                alert('没有处理后的数据可供下载');
+                return;
+            }
+            
+            // 创建工作簿和工作表
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(processedData);
+            
+            // 设置列宽
+            const wscols = processedData[0].map(() => ({wch: 20}));
+            ws['!cols'] = wscols;
+            
+            // 添加工作表到工作簿并导出
+            XLSX.utils.book_append_sheet(wb, ws, "重命名结果");
+            XLSX.writeFile(wb, "重命名结果.xlsx");
+        }
     </script>
 </body>
 </html> 
